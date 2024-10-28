@@ -1,0 +1,36 @@
+
+; simulate (bip342-txmsg), ie SIGHASH_DEFAULT, provided annex and scriptPubKeys are 252 bytes or less
+
+tx f0ccee2a000101ebf2f9fc896e70145c84116fae33d0242f8c146e1a07deecd9a98d9cc03f4fb70d000000002badf3fb01126b8c01000000001976a914551b850385def11149727e72c4470ffaeae5cdf288ac04402c797661dfac511e35f42601edd355e9cffb6ce47beddd9a9bf0914992c002af34c67933f89da981149f6044448f14ec7931f3641da82fac3aa9512d052e3b712220256c556c3663e1cfe2412e879bc1ace16785aa79c0ae1840e831e837ab9d963fac21c0cdb18e708d5164ecbd681797623cb8f9be34dd1765ef0b63788d18ca4db18478025073ee1a6e46
+tx_in_idx 0
+tx_script 20256c556c3663e1cfe2412e879bc1ace16785aa79c0ae1840e831e837ab9d963fac
+utxos 1fc6d101000000002251203240405372856fe921522eca27514e2669f0aa4c46d52c78cfe608174828f937
+
+eval (bip342_txmsg)
+
+def (VARSTRING S) (cat (strlen S) S)
+
+def (FOR FUNC UPTO IDX ACC) (if (< IDX UPTO) (FOR FUNC UPTO (+ IDX 1) (FUNC IDX ACC)) ACC)
+
+def (DUP X) (cat X X)
+
+def (PREVOUT IDX ACC) (cat ACC (tx (rc IDX 11) (rc IDX 12)))
+def (AMOUNT IDX ACC) (cat ACC (tx (rc IDX 15)))
+def (SPK IDX ACC) (cat ACC (VARSTRING (tx (rc IDX 16))))
+def (NSEQ IDX ACC) (cat ACC (tx (rc IDX 10)))
+
+def (TXOUT IDX ACC) (cat ACC (tx (rc IDX 20)) (VARSTRING (tx (rc IDX 21))))
+
+def (FORINPUTS FUNC) (FOR FUNC (tx 2) 0 nil)
+def (FOROUTPUTS FUNC) (FOR FUNC (tx 3) 0 nil)
+
+def TX_DATA (cat 0x00 0x00 (tx 0 1) (sha256 (FORINPUTS PREVOUT)) (sha256 (FORINPUTS AMOUNT)) (sha256 (FORINPUTS SPK)) (sha256 (FORINPUTS NSEQ)) (sha256 (FOROUTPUTS TXOUT)))
+def IN_DATA (cat (i (tx 14) 0x03 0x01) (substr (cat (tx 4) 0x00000000) 0 4) (i (tx 14) (sha256 (VARSTRING (tx 14))) nil))
+def SCR_DATA (cat (tx 6) 0x00ffffffff)
+
+def MYBIP342_TXMSG (sha256 (DUP (sha256 "TapSighash")) (TX_DATA) (IN_DATA) (SCR_DATA))
+
+eval (MYBIP342_TXMSG)
+blleval @MYBIP342_TXMSG
+
+program MYBIP342_TXMSG
