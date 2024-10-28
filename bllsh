@@ -1,0 +1,358 @@
+#!/usr/bin/env python3
+
+import cmd
+import functools
+import os
+import sys
+import traceback
+
+from dataclasses import dataclass, field
+from typing import Optional, Tuple, List, Any, Self
+
+readline : Optional[Any] = None
+try:
+    import readline
+except ImportError:
+    pass
+
+from element import SExpr, Atom, ALLOCATOR
+from opcodes import Set_GLOBAL_TX, Get_GLOBAL_TX, Set_GLOBAL_TX_INPUT_IDX, Get_GLOBAL_TX_INPUT_IDX, Set_GLOBAL_TX_SCRIPT, Get_GLOBAL_TX_SCRIPT, Set_GLOBAL_UTXOS, Get_GLOBAL_UTXOS
+import bll
+import symbll
+import verystable.core.messages
+
+##########
+
+# Todo:
+#
+#  * implement "softfork"
+#  * make "blleval" / "apply" available in symbll
+#  * misc additional opcodes
+#
+#  * add support for "@SYM" to mean SYM turned into a bll program in general?
+#
+#  * default values for fn arguments
+#  * destructuring of fn arguments?
+#  * defconst for compile-time constants (with quote support)
+#  * quasiquote support
+#
+#  * do stuff about costs?
+#
+#  * add tui debugger (via "textual" module?)
+
+##########
+
+####
+
+def handle_exc(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception:
+            traceback.print_exc()
+    return wrapper
+
+####
+
+class BTCLispRepl(cmd.Cmd):
+    HISTSIZE = 2000
+
+    @classmethod
+    def histpath(cls):
+        HISTPATH = os.getenv("BLLSH_HISTPATH", None)
+        if HISTPATH is None:
+            HISTPATH = os.path.expanduser("~/.bllsh.history")
+        return HISTPATH
+
+    def __init__(self, prompt=None):
+        self.prompt = ">>> " if prompt is None else prompt
+        self.symbols = symbll.SymbolTable()
+        self.wi = None
+
+        cmd.Cmd.__init__(self)
+
+    def preloop(self):
+        if readline and os.path.exists(self.histpath()):
+            readline.read_history_file(self.histpath())
+
+    def postloop(self):
+        if readline:
+            readline.set_history_length(self.HISTSIZE)
+            readline.write_history_file(self.histpath())
+
+    def show_state(self):
+        if self.wi is None: return
+        s = ""
+        for ri, c in enumerate(reversed(self.wi.continuations)):
+            i = len(self.wi.continuations) - ri
+            if hasattr(c, "localsyms"):
+                s = " ".join(f"{k}={v}" for k,v in c.localsyms.syms.items())
+                if s != "": s = f"    [{s}]"
+            print(f"   -- {i}. {c.fn}    {c.args}{s}")
+
+    def default(self, line):
+        if line.strip().startswith(";"):
+            # comment
+            return
+        return super().default(line)
+
+    def do_exit(self, arg):
+        return True
+
+    def do_EOF(self, arg):
+        if self.prompt != "": print()
+        return True
+
+    def bllparse(self, arg):
+        se = SExpr.parse(arg, manypy=True)
+        if len(se) < 1 or len(se) > 2:
+            for x in se: x.deref()
+            print("too many arguments")
+            return
+
+        if se[0].is_symbol() and se[0].val2[0] == '@':
+            prog = symbll.compile_program(se[0].val2[1:], self.symbols)
+        else:
+            prog = bll.ToBLL(se[0])
+        se[0].deref()
+        if len(se) > 1:
+            env = bll.ToBLL(se[1])
+            se[1].deref()
+        else:
+            env = Atom(0)
+
+        return prog, env
+
+    @handle_exc
+    def do_blleval(self, arg):
+        before = ALLOCATOR.x
+        ALLOCATOR.max = 0
+
+        prog, env = self.bllparse(arg)
+        r = bll.eval(prog, env)
+
+        print(r)
+        r.deref()
+        print(f"allocation: {before} -> {ALLOCATOR.x} (max: {ALLOCATOR.max})")
+        if before < ALLOCATOR.x:
+            print("allocated:")
+            for x in ALLOCATOR.allocated:
+                print(f"    {x.refcnt} {x}")
+
+    @handle_exc
+    def do_blldebug(self, arg):
+        if self.wi is not None:
+            print("Already debugging an expression")
+            return
+        prog, env = self.bllparse(arg)
+        self.wi = bll.WorkItem.begin(prog, env)
+        self.show_state()
+
+    @handle_exc
+    def do_compile(self, arg):
+        before = ALLOCATOR.x
+
+        s = SExpr.parse(arg)
+        r = symbll.compile_expr(s, symbll.SymbolIndex(self.symbols, offset=2), symbll.SymbolIndex([], offset=3))
+        print(r)
+        r.deref()
+        s.deref()
+        if before < ALLOCATOR.x:
+            print("allocated:")
+            for x in ALLOCATOR.allocated:
+                print(f"    {x.refcnt} {x}")
+
+    @handle_exc
+    def do_program(self, arg):
+        symname = arg
+        if symname not in self.symbols.syms:
+            print(f"Unknown symbol {symname}")
+            return
+        r = symbll.compile_program(symname, self.symbols)
+        print(r)
+        r.deref()
+
+    @handle_exc
+    def do_eval(self, arg):
+        before = ALLOCATOR.x
+        ALLOCATOR.max = 0
+        s = SExpr.parse(arg)
+        r = symbll.symbolic_eval(s, self.symbols)
+        print(r)
+        r.deref()
+        print(f"allocation: {before} -> {ALLOCATOR.x} (max: {ALLOCATOR.max})")
+        if before < ALLOCATOR.x:
+            print("allocated:")
+            for x in ALLOCATOR.allocated:
+                print(f"    {x.refcnt} {x}")
+
+    @handle_exc
+    def do_debug(self, arg):
+        if self.wi is not None:
+            print("Already debugging an expression")
+            return
+        sexpr = SExpr.parse(arg)
+        self.wi = symbll.WorkItem.begin(sexpr, self.symbols)
+        self.show_state()
+
+    @handle_exc
+    def do_step(self, arg):
+        if self.wi is None:
+            print("No expression being debugged")
+        elif not self.wi.finished():
+            self.wi.step()
+            self.show_state()
+        else:
+            r = self.wi.get_result()
+            print(f"Result: {r}")
+            r.deref()
+            self.wi = None
+
+    @handle_exc
+    def do_next(self, arg):
+        if self.wi is None:
+            print("No expression being debugged")
+
+        target = len(self.wi.continuations)
+        while not self.wi.finished():
+            self.wi.step()
+            if len(self.wi.continuations) <= target:
+                break
+        if not self.wi.finished():
+            self.show_state()
+        else:
+            r = self.wi.get_result()
+            print(f"Result: {r}")
+            r.deref()
+            self.wi = None
+
+    @handle_exc
+    def do_cont(self, arg):
+        if self.wi is None:
+            print("No expression being debugged")
+            return
+
+        while not self.wi.finished():
+            self.wi.step()
+
+        r = self.wi.get_result()
+        print(f"Result: {r}")
+        r.deref()
+        self.wi = None
+
+    @handle_exc
+    def do_trace(self, arg):
+        if self.wi is None:
+            print("No expression being debugged")
+            return
+
+        while not self.wi.finished():
+            self.wi.step()
+            self.show_state()
+            print("")
+
+        r = self.wi.get_result()
+        print(f"Result: {r}")
+        r.deref()
+        self.wi = None
+
+    @handle_exc
+    def do_def(self, arg):
+        s = SExpr.parse(arg, manypy=True)
+        if len(s) != 2:
+            print("Expected symbol name (plus parameters) and definition")
+            for e in s: e.deref()
+            return
+        sym, val = s
+        if sym.is_symbol():
+            self.symbols.set(sym.val2, (Atom(0), val.bumpref()))
+        elif sym.is_cons() and sym.val1.is_symbol():
+            self.symbols.set(sym.val1.val2, (sym.val2.bumpref(), val.bumpref()))
+        else:
+            print("Expected symbol name (plus parameters) and definition")
+        for e in s:
+            e.deref()
+
+    @handle_exc
+    def do_undef(self, arg):
+        for x in arg.split():
+            x = x.strip()
+            if x == "": continue
+            self.symbols.unset(x)
+
+    @handle_exc
+    def do_tx(self, arg):
+        if arg == "":
+            tx = Get_GLOBAL_TX()
+            if tx is None:
+                print("No tx set")
+            else:
+                print(tx.serialize().hex())
+        else:
+            try:
+                tx = verystable.core.messages.tx_from_hex(arg)
+            except:
+                print("Could not parse tx")
+                return
+            Set_GLOBAL_TX(tx)
+
+    @handle_exc
+    def do_tx_in_idx(self, arg):
+        if arg == "":
+            idx = Get_GLOBAL_TX_INPUT_IDX()
+            if idx is None:
+                print("No tx input idx set")
+            else:
+                print(idx)
+        else:
+            try:
+                idx = int(arg)
+            except:
+                idx = None
+            if idx is None or idx < 0:
+                print("Could not parse index")
+            else:
+                Set_GLOBAL_TX_INPUT_IDX(idx)
+
+    @handle_exc
+    def do_tx_script(self, arg):
+        if arg == "":
+            scr = Get_GLOBAL_TX_SCRIPT()
+            if scr is None:
+                print("No tx script set")
+            else:
+                print(scr.hex())
+        else:
+            try:
+                scr = bytes.fromhex(arg)
+            except:
+                print("Could not parse tx script")
+                return
+            Set_GLOBAL_TX_SCRIPT(scr)
+
+    @handle_exc
+    def do_utxos(self, arg):
+        if arg == "":
+            utxos = Get_GLOBAL_UTXOS()
+            if utxos is None:
+                print("No utxos set")
+            else:
+                for i,u in enumerate(utxos):
+                    print(f"{i} {u.serialize().hex()}")
+        else:
+            try:
+                utxos = []
+                for uh in arg.split(" "):
+                    utxos.append(verystable.core.messages.from_hex(verystable.core.messages.CTxOut(), uh))
+            except:
+                print("Could not parse utxos")
+                return
+            Set_GLOBAL_UTXOS(utxos)
+
+if __name__ == "__main__":
+    if os.isatty(sys.stdin.fileno()):
+        repl = BTCLispRepl()
+    else:
+        repl = BTCLispRepl(prompt="")
+    repl.cmdloop()
