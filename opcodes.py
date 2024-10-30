@@ -810,7 +810,7 @@ class op_tx(BinOpcode):
         if isinstance(result, Element):
             return result
         else:
-            assert isinstance(result, bytes)
+            assert isinstance(result, bytes), f"invalid tx result {result}"
             return Atom(left.val2 + result)
 
     @classmethod
@@ -882,7 +882,7 @@ class op_tx(BinOpcode):
         elif code == 8:
             # taproot merkle path
             leafver, sign, ipk, path = cls.get_bip341info()
-            return path
+            return b"".join(path)
         elif code == 9:
             # leafver, sign
             leafver, sign, ipk, path = cls.get_bip341info()

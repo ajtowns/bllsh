@@ -221,9 +221,9 @@ class fn_symbll_eval(FuncClass):
         elif args.is_symbol():
             r = ResolveSymbol(env, workitem.globalsyms, args.val2)
             if r is None:
-                args.deref()
                 env.deref()
-                workitem.error("undefined symbol")
+                workitem.error(f"undefined symbol {args}")
+                args.deref()
             elif isinstance(r, Element):
                 workitem.fin_value(r)
                 args.deref()
