@@ -945,7 +945,7 @@ FUNCS = [
   (0x09, "l", op_l), # is cons?
   (0x0a, "b", op_b), # convert list to binary tree
 
-  (0x0b, "not", op_nand),
+  (0x0b, "notall", op_nand),
   (0x0c, "all", op_and),
   (0x0d, "any", op_or),
 
