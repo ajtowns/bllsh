@@ -428,8 +428,12 @@ class WorkItem:
         value.deref()
         return None
 
-    def new_continuation(self, fn : Func, args : Element, env : SymbolTable) -> None:
-        self.continuations.append(Continuation(fn, args, env))
+    def new_continuation(self, fn : Element, args : Element, env : SymbolTable) -> None:
+        if isinstance(fn, Error):
+            self.fin_value(fn)
+        else:
+            assert isinstance(fn, Func)
+            self.continuations.append(Continuation(fn, args, env))
 
     def fin_value(self, value : Element) -> None:
         self.new_continuation(Func(fn_fin, None, Atom(0)), value, self.dummylocalsyms.bumpref())

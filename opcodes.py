@@ -457,6 +457,35 @@ class op_nand_bytes(BinOpcode):
             out[i] ^= 255
         return Atom(bytes(out))
 
+class op_shift(FixOpcode):
+    min_args = max_args = 2
+
+    @classmethod
+    def operation(cls, inp, n):
+        if not isinstance(inp, Atom) or not isinstance(n, Atom):
+            return Error("shift: expects atomic arguments")
+        delta = n.as_int()
+        if delta == 0:
+            return inp.bumpref()
+
+        bb = bytearray(delta//8) if delta > 0 else bytearray()
+        overflow = 0
+        if delta > 0:
+            delta %= 8
+        for b in inp.val2:
+            if delta < -8:
+                delta += 8
+                continue
+            elif delta < 0:
+                overflow = b >> (-delta)
+                delta += 8
+                continue
+            x = (b << delta) + overflow
+            bb.append(x & 0xFF)
+            overflow = x >> 8
+        bb.append(overflow)
+        return Atom(bytes(bb))
+
 class op_eq(BinOpcode):
     @staticmethod
     def initial_state():
@@ -966,8 +995,9 @@ FUNCS = [
   (0x18, "-", op_sub),
   (0x19, "*", op_mul),
   (0x1a, "%", op_mod),
+  (0x1b, "shift", op_shift),
   (0x1e, "<", op_lt_num),   # not restricted to u64
-# 0x1b, 0x1c, 0x1d, 0x1f missing
+# 0x1c, 0x1d, 0x1f missing
 
 #XXX element.py code seems to be buggy
 #  (0x20, "rd", op_list_read), # read bytes to Element
@@ -995,7 +1025,6 @@ FUNCS = [
 #    (constant K) -> (G, H, G/2, curve order, etc)
 #    (log2b42 N) -> floor(log_2(n) * 2**42), error if n<=0
 #    / /% -> division, divmod
-#    << >> -> shifting ops (how to deal with negatives?)
 ]
 
 
