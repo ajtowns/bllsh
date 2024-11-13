@@ -241,6 +241,7 @@ class Atom(Store):
     def simplenum(self):
         if self.val1 > 4: return False
         if self.val1 == 0: return True
+        if self.val1 == 1 and (self.val2[0] == 0x00 or self.val2[0] == 0x80): return False
         if self.val1 >= 2 and (self.val2[-1] == 0x00 or self.val2[-1] == 0x80) and self.val2[-2] < 0x80: return False
         return True
 
