@@ -649,7 +649,7 @@ class op_list_read(FixOpcode):
     def operation(cls, el):
         if not el.is_atom():
             raise Exception("rd: argument must be atom")
-        edeser = SerDeser().Deserialize(el.val2)
+        edeser = SerDeser.Deserialize(el.val2)
         return edeser
 
 class op_list_write(FixOpcode):
@@ -657,7 +657,7 @@ class op_list_write(FixOpcode):
 
     @classmethod
     def operation(cls, el):
-        eser = SerDeser().Serialize(el)
+        eser = SerDeser.Serialize(el)
         return Atom(eser)
 
 class op_secp256k1_muladd(BinOpcode):
@@ -999,9 +999,8 @@ FUNCS = [
   (0x1e, "<", op_lt_num),   # not restricted to u64
 # 0x1c, 0x1d, 0x1f missing
 
-#XXX element.py code seems to be buggy
-#  (0x20, "rd", op_list_read), # read bytes to Element
-#  (0x21, "wr", op_list_write), # write Element as bytes
+  (0x20, "rd", op_list_read), # read bytes to Element
+  (0x21, "wr", op_list_write), # write Element as bytes
 
   (0x22, "sha256", op_sha256),
   (0x23, "ripemd160", op_ripemd160),

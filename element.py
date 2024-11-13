@@ -343,8 +343,95 @@ class Func(Pair):
                 name += ",**"
         return "FN(%s,%s)" % (name, self.val2)
 
-#XXX broken
 class SerDeser:
+    """follows chia's serialization approach, which is very simple"""
+
+    def __init__(self, b):
+        self.b, self.i = b, 0
+
+    @classmethod
+    def Deserialize(cls, b : bytes) -> Element:
+        deser = cls(b)
+        try:
+            el = deser._Deserialize()
+            if deser.i != len(deser.b):
+                el.deref()
+                return Error(f"incomplete deserialization: {deser.b[deser.i:].hex()}")
+        except EOFError:
+            return Error("deserialization failed, insuffient data")
+        return el
+
+    def read(self, n):
+        assert n >= 1
+        if self.i + n - 1 >= len(self.b):
+            None
+        i = self.i
+        self.i += n
+        return self.b[i:self.i]
+
+    def _Deserialize(self) -> Element:
+        b = self.read(1)
+        if b[0] == 0x80:
+            return Atom(0)
+        elif b[0] < 0x80:
+            return Atom(b)
+        elif b[0] < 0xc0:
+            return Atom(self.read(b[0] & 0x3F))
+        elif b[0] < 0xe0:
+            n = ((b[0] & 0x1F) << 8) | self.read(1)
+            return Atom(self.read(n))
+        elif b[0] < 0xf0:
+            n = ((b[0] & 0x1F) << 16)
+            n |= (self.read(1) << 8)
+            n |= self.read(1)
+            return Atom(self.read(n))
+        elif b[0] == 0xff:
+            l = self._Deserialize()
+            if isinstance(l, Error):
+                return l
+            r = self._Deserialize()
+            if isinstance(r, Error):
+                l.deref()
+                return r
+            return Cons(l,r)
+        else:
+            return Error("serialized atom too large to deserilize")
+
+    @classmethod
+    def sizebytes(cls, n: int) -> bytes:
+        if n <= 0x3F:
+            return bytes([0x80 + n])
+        elif n <= 0x1FFF:
+            return bytes([0xc0 + (n >> 8), (n & 0xFF)])
+        elif n <= 0xFFFFF:
+            return bytes([0xe0 + (n >> 16), ((n >> 8) & 0xFF), (n & 0xFF)])
+        assert False
+
+    @classmethod
+    def Serialize(cls, e : Element) -> bytes | Error:
+        if isinstance(e, Cons):
+            l = cls.Serialize(e.val1)
+            if isinstance(l, Error):
+                return l
+            r = cls.Serialize(e.val2)
+            if isinstance(r, Error):
+                return r
+            return b'\xff' + l + r
+        elif isinstance(e, Atom):
+            if len(e.val2) == 0:
+                return b'\x80' # nil
+            elif len(e.val2) == 1 and e.val2[0] < 128:
+                return e.val2
+            elif len(e.val2) > 0xFFFFF:
+                return Error("atom too large to serialize")
+            else:
+                return cls.sizebytes(len(e.val2)) + e.val2
+        else:
+            return Error("can only serialize atom/cons")
+
+
+#XXX broken
+class SerDeserBroken:
     MAX_QUICK_ONEBYTE = 51
     MAX_QUICK_MULTIBYTE = 64
     MAX_QUICK_LIST = 5
