@@ -303,7 +303,7 @@ class fn_report(FuncClass):
             last = state
         else:
             last = a[-1]
-        print(f"report: ({" ".join(map(str, reversed(a)))})")
+        print(f"report: ({' '.join(map(str, reversed(a)))})")
         return last.bumpref()
 
     @classmethod
