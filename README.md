@@ -152,10 +152,10 @@ offers the following commands:
    * `undef A` -- remove the definition of a symbll symbol
 
  * Transaction context:
-   * `do_tx` -- provide the hex encoded tx
-   * `do_tx_in_idx` -- provide the decimal index of the tx input being validated
-   * `do_tx_script` -- provide the hex encoded script (for signature validation/introspection; does not otherwise affect symbll/bll evaluation)
-   * `do_utxos` -- provide hex serialized CTxOut object for the utxos being spent, separated by spaces
+   * `tx` -- provide the hex encoded tx
+   * `tx_in_idx` -- provide the decimal index of the tx input being validated
+   * `tx_script` -- provide the hex encoded script (for signature validation/introspection; does not otherwise affect symbll/bll evaluation)
+   * `utxos` -- provide hex serialized CTxOut object for the utxos being spent, separated by spaces
 
  * Debugging:
    * `debug SYMBLL` -- begin debugging a symbll expression
