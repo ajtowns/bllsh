@@ -154,7 +154,7 @@ class op_x(FixOpcode):
     max_args = 10
     @classmethod
     def operation(cls, *args):
-        return Error("Exception: {" ".join(str(a) for a in args)}")
+        return Error(f"Exception: {" ".join(str(a) for a in args)}")
 
 class op_add(BinOpcode):
     @classmethod
