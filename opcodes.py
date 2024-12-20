@@ -10,6 +10,8 @@ import verystable.core.messages
 import verystable.core.script
 import verystable.core.secp256k1
 
+import ripemd160
+
 from element import Element, Atom, Cons, Error, SerDeser, int_to_bytes
 
 class Tree:
@@ -285,12 +287,12 @@ class op_sha256(IntStateOpcode):
 class op_ripemd160(op_sha256):
     @classmethod
     def initial_int_state(cls):
-        return hashlib.new("ripemd160")
+        return ripemd160.hasher()
 
 class op_hash160(op_sha256):
     @classmethod
     def final_state(cls, int_state):
-        x = hashlib.new("ripemd160")
+        x = ripemd160.hasher()
         x.update(int_state.digest())
         return Atom(x.digest())
 
