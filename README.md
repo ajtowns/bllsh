@@ -170,6 +170,9 @@ offers the following commands:
    * `program SYMBLL` -- compile a symbll expression to a bll program that populates its own environment with any global symbol definitions
    * `program @SYMBOL` -- compile the symbll global into a bll program
 
+ * Convenience:
+   * `import PATH` -- import and run code from a given file
+
 ## Implementation details
 
 ### Element

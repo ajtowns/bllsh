@@ -125,6 +125,15 @@ class BTCLispRepl(cmd.Cmd):
         return prog, env
 
     @handle_exc
+    def do_import(self, arg):
+        with open(arg, "r") as f:
+            for l in f:
+                l = l.strip()
+                if l == "":
+                    continue
+                self.onecmd(l)
+
+    @handle_exc
     def do_blleval(self, arg):
         before = ALLOCATOR.x
         ALLOCATOR.max = 0
