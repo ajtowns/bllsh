@@ -925,7 +925,6 @@ class op_tx(BinOpcode):
     def get_tx_input_info(cls, code, which):
         txin = GLOBAL_TX.vin[which]
         wit = GLOBAL_TX.wit.vtxinwit[which].scriptWitness.stack
-        coin = GLOBAL_UTXOS[which]
         if code == 10:
              return struct.pack("<I", txin.nSequence)
         elif code == 11:
@@ -941,8 +940,10 @@ class op_tx(BinOpcode):
              else:
                  return b''
         elif code == 15:
+             coin = GLOBAL_UTXOS[which]
              return struct.pack("<Q", coin.nValue)
         elif code == 16:
+             coin = GLOBAL_UTXOS[which]
              return coin.scriptPubKey
         else:
              return b''
