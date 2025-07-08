@@ -1,0 +1,79 @@
+
+; flexmarks - flexible coin earmarks
+; https://delvingbitcoin.org/t/flexible-coin-earmarks/1275
+
+; -------------------------------------------------------------------
+; *** implement these functions ***
+; these functions define the meaning of the flexible earmark policy
+
+; amount of funds that can be extracted via a given earmark
+; (default: 0)
+def (EXTRACT OV EM PARAMS) 0
+
+; how to update the ipk
+; (default: keep it the same)
+def (NEWIPK OV EM PARAMS) (tx 7)
+
+; what to update/replace the earmark with
+def (NEWEM OV EM PARAMS) (x "implement something")
+
+; how to update the overview
+def (NEWOV OV EM PARAMS) (x "implement something")
+
+; check if the earmark is valid
+def (CHECKEM OV EM PARAMS) (x "implement something")
+
+; -------------------------------------------------------------------
+; generic helpers
+
+def (VARINT2 N) (if (< N 253) (substr N 0 1) (cat 0xFD (substr (cat N 0x000000) 0 2)))
+def (VARSTR S) (cat (VARINT2 (strlen S)) S)
+
+def (TAGHASH2 SHATAG DATA) (sha256 SHATAG SHATAG DATA)
+def (TAGHASH TAG DATA) (TAGHASH2 (sha256 TAG) DATA)
+
+; -------------------------------------------------------------------
+; taproot calculations
+
+def (TAPBRANCH A B) (TAGHASH "TapBranch" (if (<s A B) (cat A B) (cat B A)))
+def (TAPPATH IPK PATH LEAF) (if PATH (TAPPATH IPK (substr PATH 32) (TAPBRANCH LEAF (substr PATH 0 32))) (TAGHASH "TapTweak" (cat IPK LEAF)))
+
+def (TAPROOT SPKODD LEAFHASH PATH IPK SPK) (secp256k1_muladd (TAPPATH IPK PATH LEAFHASH) (rc IPK 1) (rc SPK SPKODD))
+
+def (TAPROOTMAN TLVER SCRIPT PATH IPK SPKPAR SPK) (TAPROOT SPKPAR (TAPLEAF TLVER SCRIPT) PATH IPK SPK)
+
+; -------------------------------------------------------------------
+; earmark root calculation
+
+def (EMBRANCH A B) (TAGHASH "EMBranch" (if (<s A B) (cat A B) (cat B A)))
+def (EMLEAF EM) (TAGHASH "EMLeaf" (wr EM))
+def (EMPATH LEAF PATH) (if PATH (EMPATH (EMBRANCH LEAF (substr PATH 0 32)) (substr PATH 32)) LEAF)
+def (EMROOT OV EM PATH) (TAGHASH "EM" (wr (rc (EMPATH (EMLEAF EM) PATH) OV))) 
+
+; -------------------------------------------------------------------
+; check spk of output
+
+; take the current path, replace the first component with the new EMROOT
+def (NEWTLPATH OV EM EMPATH) (cat (EMROOT OV EM EMPATH) (substr (tx 8) 32))
+
+def (MATCHNEWSPK SPK SPKODD OV EM EMPATH PARAMS) (TAPROOT SPKODD (tx 6) (NEWTLPATH (NEWOV OV EM PARAMS) EM EMPATH) (NEWIPK OV EM PARAMS) SPK)
+
+def (CHECKTAPSPK SPK) (if (= (substr SPK 0 2) 0x0120) (substr SPK 2) (x))
+
+def (CHECKNEWSPK OUTIDX SPKODD OV EM EMPATH PARAMS) (MATCHNEWSPK (CHECKTAPSPK (tx (rc OUTIDX 21))) SPKODD OV EM EMPATH PARAMS)
+
+; -------------------------------------------------------------------
+; check value of output
+
+def (CHECKVALUE OV EM PARAMS OUTIDX) (not (< (+ (tx 21) (EXTRACT OV EM PARAMS)) (tx 15)))
+
+; -------------------------------------------------------------------
+; check overview/earmark were correct
+
+def (CHECKOVEM OV EM EMPATH) (= (substr (tx 8) 0 32) (EMROOT OV EM EMPATH))
+
+; -------------------------------------------------------------------
+; combine it all together
+
+def (FLEXMARK OV EM EMPATH PARAMS OUTIDX SPKODD) (if (and (CHECKEM OV EM PARAMS) (CHECKOVEM OV EM EMPATH) (CHECKVALUE OV EM PARAMS OUTIDX) (CHECKNEWSPK OUTIDX SPKODD OV EM EMPATH PARAMS)) 1 (x))
+
