@@ -375,6 +375,20 @@ class op_l(FixOpcode):
     def operation(cls, lst):
         return Atom(1 if lst.is_cons() else 0)
 
+class op_verify(BinOpcode):
+    # if any are not true, error
+
+    @staticmethod
+    def initial_state():
+        return Atom(1)
+
+    @classmethod
+    def binop(cls, left, right):
+        if right.is_nil():
+            return Error("verify failed")
+        else:
+            return left.bumpref()
+
 class op_nand(BinOpcode):
     # aka is any false?
     @classmethod
@@ -1000,8 +1014,9 @@ FUNCS = [
   (0x1a, "%", op_mod),
   (0x1b, "shift", op_shift),
   (0x1e, "<", op_lt_num),   # not restricted to u64
-# 0x1c, 0x1d, 0x1f missing
+# 0x1c, 0x1d missing
 
+  (0x1f, "v", op_verify), # exception if param is nil
   (0x20, "rd", op_list_read), # read bytes to Element
   (0x21, "wr", op_list_write), # write Element as bytes
 
