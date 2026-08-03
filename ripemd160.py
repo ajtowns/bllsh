@@ -1,6 +1,8 @@
-# Copyright (c) 2024 Anthony Towns
+#!/usr/bin/python3
+# Copyright (c) 2024-present Anthony Towns
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
 """Extend test-only RIPEMD160 implementation to offer hashlib-ish interface."""
 
 from verystable.core.ripemd160 import compress
